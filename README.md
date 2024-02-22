@@ -13,7 +13,7 @@ _Mohammad Reza Zare Shahneh, Michael Strobel, Giovanni Andrea Vitale, Christian 
     git submodule init
     git submodule update
     ```
-1. Add SIRIUS data (SIRIUS folder in tht main directory)
+1. Add SIRIUS data (SIRIUS folder in tht main directory) - optional
 
 1. run the following
     ```
