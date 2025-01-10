@@ -1,3 +1,4 @@
-[submodule "SmallMol_Mod_Site_Localization"]
-	path = SmallMol_Mod_Site_Localization
-	url = git@github.com:mshahneh/ModiFinder_base.git
+[submodule "ModiFinder_base"]
+	path = ModiFinder_base
+	url = git@github.com:Wang-Bioinformatics-Lab/ModiFinder_base.git
+	branch = main

@@ -15,5 +15,13 @@ server-compose:
 	docker-compose --compatibility build
 	docker-compose --compatibility up -d
 
+server-compose-production:
+	docker-compose --compatibility build
+	docker-compose --compatibility -f docker-compose.yml -f docker-compose-prod.yml up -d
+
+server-compose-production-interative:
+	docker-compose --compatibility build
+	docker-compose --compatibility -f docker-compose.yml -f docker-compose-prod.yml up
+
 attach:
-	docker exec -i -t gnpslcms-dash /bin/bash
+	docker exec -i -t mod-site /bin/bash

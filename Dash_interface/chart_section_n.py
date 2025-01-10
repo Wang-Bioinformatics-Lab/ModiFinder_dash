@@ -7,7 +7,8 @@ import rdkit.Chem as Chem
 import dash_bootstrap_components as dbc
 import numpy as np
 from Dash_interface.fragment_selection import FragmentsDisplayAIO
-
+import modifinder.utilities.visualizer as vis
+import modifinder.utilities.mol_utils as utils
 
 def dash_svg(text):
     """
@@ -20,6 +21,7 @@ def dash_svg(text):
         return None
 
 def get_layout():
+    # print("in get layout")
     return html.Div(
         id="results",
         children=[
@@ -65,6 +67,7 @@ def get_layout():
                     "justifyContent": "space-around",
                     "alignItems": "center",
                     "position": "relative",
+                    "flexWrap": "wrap",
                     "zIndex": "2",
                 },
             ),
@@ -101,7 +104,7 @@ def get_layout():
     )
 
 
-def get_callbacks(app, visualizer, utils):
+def get_callbacks(app, diff_to_formula):
     colorsInxMain = {
         "matched_shifted": "red",
         "matched_unshifted": "blue",
@@ -117,67 +120,90 @@ def get_callbacks(app, visualizer, utils):
     def update_stats(siteLocatorObj, args):
         if siteLocatorObj == None:
             return None, None
-        # print("in update_stats siteLocatorObj loading")
+        # print("in update stats")
         siteLocator = pickle.loads(base64.b64decode(siteLocatorObj))
-        # print("in update_stats siteLocatorObj loaded")
+
+        modified_compound_id = siteLocator._get_unknown()
+        
+        main_compound_id = siteLocator._get_known_neighbor(modified_compound_id)
+        
+        main_compound = siteLocator.network.nodes[main_compound_id]['compound']
+        modified_compound = siteLocator.network.nodes[modified_compound_id]['compound']
+
+        delta_weight = abs(
+                            main_compound.spectrum.precursor_mz
+                            - modified_compound.spectrum.precursor_mz
+                        )
+        ppm_tolerance = siteLocator.ppm_tolerance
+        ppm_diff = max(main_compound.spectrum.precursor_mz, modified_compound.spectrum.precursor_mz) * ppm_tolerance / 1000000
+        lower_bound = delta_weight - ppm_diff
+        upper_bound = delta_weight + ppm_diff
+        formulas = diff_to_formula[(diff_to_formula["difference"] >= lower_bound) & (diff_to_formula["difference"] <= upper_bound)]['diff_formula']
+        # get unique formulas
+        formulas = formulas.drop_duplicates()
+        # make comma separated string
+        formulas = formulas.str.cat(sep=', ')
+
+
+
         scores = siteLocator.generate_probabilities()
-        # print("in update_stats probabilities generated")
         stats = []
-        stats.append(("number of matched peaks", str(len(siteLocator.matched_peaks))))
-        stats.append(("number of shifted", str(len(siteLocator.shifted))))
+        matched_peaks = siteLocator.get_edge_detail(main_compound.id, modified_compound.id)
+        stats.append(("number of matched peaks", str(len(matched_peaks.get_matches_pairs()))))
+        # stats.append(("number of shifted", str(len(siteLocator.shifted))))
         stats.append(
             (
                 "Δ weight",
-                str(
-                    round(
-                        abs(
-                            siteLocator.main_compound.Precursor_MZ
-                            - siteLocator.modified_compound.Precursor_MZ
-                        ),
-                        4,
-                    )
-                ),
+                str(round(delta_weight, 5)),
             )
         )
         isAddition = True
         if (
-            siteLocator.main_compound.Precursor_MZ
-            > siteLocator.modified_compound.Precursor_MZ
+            main_compound.spectrum.precursor_mz
+            > modified_compound.spectrum.precursor_mz
         ):
             isAddition = False
         stats.append(("Modification Type", "Addition" if isAddition else "Removal"))
+        stats.append(("Possible Modification Formulas", formulas))
+
+        # print("done with stats")
         draw_output = []
-        if siteLocator.modified_compound.structure is not None:
-            svg1 = visualizer.molToSVG(
-                siteLocator.modified_compound.structure,
-                siteLocator.main_compound.structure,
-                True,
+        if modified_compound.structure is not None:
+            svg1 = vis.draw_modifications(
+                modified_compound.structure,
+                main_compound.structure,
+                output_type="svg",
+                highlight_common=False,
+                size=(1200, 1200),
+                legend_position=(850, 1050),
+                legend_font=40,
+                modification_categories=['Added', 'Removed'],
             )
             if isAddition:
-                trueSite = utils.calculateModificationSites(
-                    siteLocator.modified_compound.structure,
-                    siteLocator.main_compound.structure,
+                trueSite = utils._calculateModificationSites(
+                    modified_compound.structure,
+                    main_compound.structure,
                     False,
                 )[0]
             else:
-                trueSite = utils.calculateModificationSites(
-                    siteLocator.main_compound.structure,
-                    siteLocator.modified_compound.structure,
+                trueSite = utils._calculateModificationSites(
+                    main_compound.structure,
+                    modified_compound.structure,
                     False,
                 )[0]
-            stats.append(
-                (
-                    "Evaluation Score",
-                    str(
-                        round(
-                            siteLocator.calculate_score(
-                                trueSite, "average_dist_normalized", scores
-                            ),
-                            4,
-                        )
-                    ),
-                )
-            )
+            # stats.append(
+            #     (
+            #         "Evaluation Score",
+            #         str(
+            #             round(
+            #                 siteLocator.calculate_score(
+            #                     trueSite, "average_dist_normalized", scores
+            #                 ),
+            #                 4,
+            #             )
+            #         ),
+            #     )
+            # )
             draw_output.append(
                 html.Div(
                     id="prediction_section",
@@ -192,15 +218,39 @@ def get_callbacks(app, visualizer, utils):
                     },
                 )
             )
+
+
+        svg2 = vis.draw_molecule_heatmap(main_compound.structure, scores, output_type="svg", shrink_labels=True, show_labels=True, size=(1200, 1200))
+        # print("making svg3")
+        # svg3 = ""
+        svg3 = vis.draw_molecule_heatmap(main_compound.structure, scores, output_type="svg", shrink_labels=True, show_labels=True, show_legend=False, size=(1200, 1200))
+        # print("done with svg3")
         
-        svg2 = visualizer.highlightScores(siteLocator.main_compound.structure, scores, True, True, 1)
         draw_output.append(
             html.Div(
                 id="substr_section",
                 children=[
                     html.H3("Prediction"),
                     html.Img(src=dash_svg(svg2), style={"max-width": "30vw"}),
+                    # download button to download the svg
+                    html.Div(
+                        [
+                            dbc.Button(
+                                [html.I(className='bi bi-download', style={'font-size': '1rem'})], # House icon
+                                title="Download SVG",
+                                id="download_svg_button",
+                                color="secondary",
+                                style={"position": "absolute", "top": "5%", "right": "5%"},
+                            ),
+                            # store the svg in a hidden div
+                            html.Div(id="hidden_svg", children=svg3, style={"display": "none"}),
+                            dcc.Download(id="download_heatmap_svg"),
+                        ]
+                    ),
                 ],
+                style={
+                    "position": "relative",
+                }
             )
         )
 
@@ -243,9 +293,7 @@ def get_callbacks(app, visualizer, utils):
     )
     def update_peaks(data):  # , slider_value):
         if data == None:
-            # print("in update_peaks data is None")
             return {}, {"display": "none"}
-        # print("in update_peaks siteLocatorObj loading")
         peaksObj = pickle.loads(base64.b64decode(data))
         main_compound_peaks = peaksObj["main_compound_peaks"]
         mod_compound_peaks = peaksObj["mod_compound_peaks"]
@@ -254,7 +302,6 @@ def get_callbacks(app, visualizer, utils):
         main_precursor_mz = peaksObj["main_precursor_mz"]
         mod_precursor_mz = peaksObj["mod_precursor_mz"]
 
-        # print("in update_peaks siteLocatorObj loaded")
         fig = go.Figure()
         typesInxMain = {"matched_shifted": [], "matched_unshifted": [], "unmatched": []}
         x1 = []
@@ -324,6 +371,9 @@ def get_callbacks(app, visualizer, utils):
 
         minX = min(min(x1), min(x2))
         maxX = max(max(x1), max(x2))
+        minX = min(minX, main_precursor_mz, mod_precursor_mz)
+        maxX = max(maxX, main_precursor_mz, mod_precursor_mz)
+
         for inx_type in typesInxMain:
             x_main = [round(x1[j], 4) for j in typesInxMain[inx_type]]
             y1_ = [y1[j] for j in typesInxMain[inx_type]]
@@ -338,14 +388,20 @@ def get_callbacks(app, visualizer, utils):
             y_ = y_main + y_modified
             colors = [colorsInxMain[inx_type]] * len(x_)
             if inx_type == "unmatched":
+                visibility = "legendonly"
+                if len(typesInxModified["matched_shifted"]) == 0 and len(
+                    typesInxModified["matched_unshifted"]
+                ) == 0:
+                    visibility = None
+                
                 fig.add_trace(
                     go.Bar(
                         x=x_,
                         y=y_,
+                        width=(maxX - minX) / 500,
                         hovertext=indicis,
                         name=inx_type,
-                        width=(maxX - minX) / 500,
-                        visible="legendonly",
+                        visible=visibility,
                         marker_color=colors,
                     )
                 )
@@ -372,7 +428,7 @@ def get_callbacks(app, visualizer, utils):
                         y=y_,
                         hovertext=hovertext,
                         name=inx_type,
-                        width=(maxX - minX) / 800,
+                        width=(maxX - minX) / 500,
                         marker_color=colors,
                     )
                 )
@@ -383,7 +439,7 @@ def get_callbacks(app, visualizer, utils):
                         y=y_,
                         hovertext=indicis,
                         name=inx_type,
-                        width=(maxX - minX) / 800,
+                        width=(maxX - minX) / 500,
                         marker_color=colors,
                     )
                 )
@@ -412,15 +468,21 @@ def get_callbacks(app, visualizer, utils):
             )
         )
 
-        minX = min(minX, main_precursor_mz, mod_precursor_mz)
-        maxX = max(maxX, main_precursor_mz, mod_precursor_mz)
+        # minX = min(minX, main_precursor_mz, mod_precursor_mz)
+        # maxX = max(maxX, main_precursor_mz, mod_precursor_mz)
 
+        # fig.update_traces(
+        #     width=(maxX - minX) / 400,
+        # )
         fig.update_layout(
-            title="Peaks",
+            title="Alignment of Peaks",
             bargap=0,
             xaxis_title="m/z",
-            yaxis_title="intensity",
+            yaxis_title="Intensity",
             legend_title="Peak Type",
+            # remove paddings
+            margin=dict(l=0, r=0, t=40, b=0),
+
             # range of xaxis
             xaxis=dict(
                 range=[minX - (maxX * 0.01), maxX * 1.01],
@@ -431,20 +493,25 @@ def get_callbacks(app, visualizer, utils):
             "position": "relative",
             "flexDirection": "column",
             "justifyContent": "center",
-            "width": "100%",
+            "width": "98%",
             "alignItems": "center",
-            "margin-top": "-4vh",
+            "padding": "20px",
+            "margin": "auto",
+            "margin-top": "1vh",
             "zIndex": "1",
         }
 
 
-    @app.callback(
-        Output("peak_info", "children", allow_duplicate=True),
-        Input("siteLocatorObj", "data"), 
-        prevent_initial_call=True,
-    )
-    def clear_peak_info(data):
-        return None
+    # @app.callback(
+    #     Output("peak_info", "children", allow_duplicate=True),
+    #     Input("siteLocatorObj", "data"), 
+    #     prevent_initial_call=True,
+    # )
+    # def clear_peak_info(data):
+    #     if data == None:
+    #         return ""
+    #     else:
+    #         return "Select a peak to see its fragments"
 
     @app.callback(
         Output("peak_info", "children", allow_duplicate=True),
@@ -485,8 +552,6 @@ def get_callbacks(app, visualizer, utils):
                             fragment_indicies.append(i)
                     result_posibility_indicies.append(fragment_indicies)
                 
-                # print("fragments", fragments, "result_posibility_indicies", result_posibility_indicies)
-                # return html.Div("hi")
                 return FragmentsDisplayAIO(
                     result_posibility_indicies,
                     structure,
@@ -550,23 +615,65 @@ def get_callbacks(app, visualizer, utils):
         return patched_figure
 
     @app.callback(
-        Output("siteLocatorObj", "data", allow_duplicate=True),
+        [Output("siteLocatorObj", "data", allow_duplicate=True), 
+         Output("peak_info", "children", allow_duplicate=True),
+         Output('fragmentsObj', 'data', allow_duplicate=True)],
         Input(FragmentsDisplayAIO.ids.fragment_data("fragmentDisplay"), "data"),
         State("siteLocatorObj", "data"),
         prevent_initial_call=True,
     )
     def apply_structure_filter(data, siteLocatorObj):
         if siteLocatorObj == None:
-            # print("apply_structure_filter")
             raise PreventUpdate
         if data["has_changed"] == False:
-            # print("apply_structure_filter", "!has_changed")
             raise PreventUpdate
-        # print("apply_structure_filter", "has_changed :D")
         siteLocator = pickle.loads(base64.b64decode(siteLocatorObj))
-        ind = siteLocator.main_compound.get_peak_index(data["mz"])
-        for index in ind:
-            siteLocator.main_compound.vote_for_fragments(
-                index, [data["all_fragments"][i] for i in data["selected_fragments"]]
-            )
-        return base64.b64encode(pickle.dumps(siteLocator)).decode()
+        
+        modified_compound_id = siteLocator._get_unknown()
+        main_compound_id = siteLocator._get_known_neighbor(modified_compound_id)
+        main_compound = siteLocator.network.nodes[main_compound_id]['compound']
+        main_compound_peaks = [(main_compound.spectrum.mz[i], main_compound.spectrum.intensity[i]) for i in range(len(main_compound.spectrum.mz))]
+        modified_compound = siteLocator.network.nodes[modified_compound_id]['compound']
+        
+        ind = main_compound.spectrum.get_peak_indexes(data["mz"])
+        main_compound.peak_fragments_map[ind[0]] = [data["all_fragments"][i] for i in data["selected_fragments"]]
+        
+        fragmentsObj = {
+            "frags_map": main_compound.peak_fragments_map,
+            "structure": main_compound.structure,
+            "peaks": main_compound_peaks,
+            "Precursor_MZ": main_compound.spectrum.precursor_mz,
+        }
+
+
+        fragments = list(main_compound.peak_fragments_map[ind[0]])
+        result_posibility_indicies = []
+        for fragment in fragments:
+            fragment_indicies = []
+            for i in range(len(main_compound.structure.GetAtoms())):
+                if fragment & 1 << i:
+                    fragment_indicies.append(i)
+            result_posibility_indicies.append(fragment_indicies)
+
+        new_peak_info = FragmentsDisplayAIO(
+            result_posibility_indicies,
+            main_compound.structure,
+            {
+                "mz": data["mz"],
+                "intensity": data["intensity"],
+                "all_fragments": fragments,
+            },
+            "fragmentDisplay",
+        )
+
+        return base64.b64encode(pickle.dumps(siteLocator)).decode(), new_peak_info, base64.b64encode(pickle.dumps(fragmentsObj)).decode()
+    
+    @app.callback(
+        Output("download_heatmap_svg", "data"),
+        Input("download_svg_button", "n_clicks"),
+        State("hidden_svg", "children"),
+    )
+    def download_svg(n_clicks, svg):
+        if n_clicks:
+            return dict(content=svg, filename="heatmap.svg")
+        return None

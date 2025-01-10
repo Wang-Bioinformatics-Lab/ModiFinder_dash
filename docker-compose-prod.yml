@@ -1,0 +1,7 @@
+version: '3'
+services:
+  mod-site:
+    volumes:
+      - ./logs:/app/logs:rw
+      - /home/user/LabData/Reza/data:/app/data:rw
+    

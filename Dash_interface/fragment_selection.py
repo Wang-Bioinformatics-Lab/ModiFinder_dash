@@ -3,7 +3,7 @@ from dash.exceptions import PreventUpdate
 import uuid
 import base64
 from dash.development.base_component import Component
-from SmallMol_Mod_Site_Localization import visualizer
+import modifinder.utilities.visualizer as mf_vis
 import dash_bootstrap_components as dbc
 
 
@@ -16,41 +16,6 @@ def dash_svg(text):
         return "data:image/svg+xml;base64,{}".format(svg.decode())
     except:
         return None
-
-
-# class SingleFragmentAIO(html.Div):  # html.Div will be the "parent" component
-#     def __init__(self, fragment, mol, formula = "None", mode="display", aio_id=None,*args, **kwargs):
-#         if aio_id is None:
-#             aio_id = str(uuid.uuid4())
-
-#         self.image = visualizer.highlightMolIndices(mol, fragment)
-#         self.formula = formula
-
-#         super().__init__(children=[
-#             html.Img(src= dash_svg(self.image), style={"width": "300px"}),
-#             html.Div(self.formula) if self.formula != "None" else None,
-#             # show the selected state of the fragment if it is in edit mode
-#             dcc.Checklist(
-#                 options=[
-#                     {'label': 'Selected', 'value': True}
-#                 ],
-#                 value=[True],
-#                 id={
-#                     "component": "FragmentsDisplayAIO",
-#                     "subcomponent": "SingleFragmentAIO",
-#                     "aio_id": aio_id,
-#                 }
-#             ) if mode == "edit" else None
-#         ], *args, **kwargs)
-
-# @property
-# def image(self):
-#     return visualizer.draw_fragment(self.fragment, self.mol)
-
-# @property
-# def formula(self):
-#     return self.fragment.formula
-
 
 # All-in-One Components should be suffixed with 'AIO'
 class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
@@ -123,7 +88,7 @@ class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
                 ),
             ],
         )
-
+        print("fragments_indicies", fragments_indicies)
         self.aio_id = aio_id
         super().__init__(
             children=[
@@ -135,13 +100,14 @@ class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
                     dbc.Button("Select all", id= self.ids.select_all(self.aio_id), n_clicks=0),
                     dbc.Button("Deselect all", id= self.ids.deselect_all(self.aio_id), n_clicks=0),
                 ], style={"display": "none"}),
+                
 
                 dcc.Checklist(
                     [
                         {
                             "label": html.Img(
                                 src=dash_svg(
-                                    visualizer.highlightMolIndices(mol, fragment)
+                                    mf_vis.draw_frag_of_molecule(mol, fragment, output_type="svg")
                                 ),
                                 style={"width": "300px"},
                             ),

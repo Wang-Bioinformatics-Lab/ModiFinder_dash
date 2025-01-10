@@ -1,16 +1,23 @@
-FROM continuumio/miniconda3:4.10.3
+FROM ubuntu:22.04
 
-RUN apt-get update && apt-get install -y build-essential libarchive-dev
+RUN apt-get update && apt-get install -y build-essential libarchive-dev wget
 
-# Installing mamba
-RUN conda install -c conda-forge mamba
+# Install Mamba
+ENV CONDA_DIR /opt/conda
+RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O ~/miniforge.sh && /bin/bash ~/miniforge.sh -b -p /opt/conda
+ENV PATH=$CONDA_DIR/bin:$PATH
+
+# Adding to bashrc
+RUN echo "export PATH=$CONDA_DIR:$PATH" >> ~/.bashrc
 
 # Creating Conda Envs
-COPY enviroment.yml .
+COPY conda-env.yml .
 
-RUN mamba env create -f enviroment.yml
-RUN echo "source activate modi-finder-web" > ~/.bashrc
-ENV PATH /opt/conda/envs/modi-finder-web/bin:$PATH
+RUN mamba env create -f conda-env.yml -n smallmol_mod_site_localization_dash
+
+# Copying in the module and installing
+COPY ModiFinder_base /app/ModiFinder_base
+RUN /bin/bash -c "source activate smallmol_mod_site_localization_dash && pip install -e ./app/ModiFinder_base"
 
 COPY . /app
 WORKDIR /app
