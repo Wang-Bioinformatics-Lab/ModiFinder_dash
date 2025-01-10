@@ -13,3 +13,4 @@ dash-html-components
 dash-renderer
 dash-table
 pyteomics
+myopic-mces
