@@ -38,3 +38,4 @@ dependencies:
     - dash-table
     - dash-daq
     - furl
+    - myopic-mces
