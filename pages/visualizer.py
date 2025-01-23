@@ -100,7 +100,8 @@ NAVBAR = dbc.Navbar(
                 dbc.NavItem(dbc.NavLink("Wang Bioinformatics Lab", href="https://www.cs.ucr.edu/~mingxunw/")),
                 dbc.NavItem(dbc.NavLink("ModiFinder Dashboard", href="https://modifinder.gnps2.org/")),
                 dbc.NavItem(dbc.NavLink("Visualizer", href="https://modifinder.gnps2.org/visualizer")),
-                dbc.NavItem(dbc.NavLink("ModiFinder Documentation", href="https://wang-bioinformatics-lab.github.io/ModiFinder_base/")),
+                dbc.NavItem(dbc.NavLink("Tutorial", href="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/modifinder-web/")),
+                dbc.NavItem(dbc.NavLink("Documentation", href="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/modifinder/")),
             ],
         navbar=True)
     ],
