@@ -11,6 +11,7 @@ import base64
 from io import BytesIO
 import sys
 from PIL import Image
+import urllib
 # sys.path.append('../')
 # sys.path.append('../SmallMol_Mod_Site_Localization')
 # from SmallMol_Mod_Site_Localization.modifinder.utilities import visualizer as vis
@@ -511,6 +512,7 @@ def api(function_name):
         args = request.args
         kwargs = {}
         file_type = 'png'
+        print(args)
         for key in args:
             if '.png' in args[key]:
                 kwargs[key] = args[key].split('.png')[0]
@@ -518,14 +520,6 @@ def api(function_name):
             elif '.svg' in args[key]:
                 kwargs[key] = args[key].split('.svg')[0]
                 file_type = 'svg'
-            elif key == 'spectrums':
-                string = args[key]
-                string = string.replace(' ', '')
-                string = string.replace('[', '')
-                string = string.replace(']', '')
-                string = string.replace('\'', '')
-                string = string.split(',')
-                kwargs[key] = string
             else:
                 kwargs[key] = args[key]
             if key == 'output_type':
@@ -533,19 +527,39 @@ def api(function_name):
         
         # all args are strings, convert to appropriate types
         for key in kwargs:
-            if kwargs[key] == 'True':
-                kwargs[key] = True
-            elif kwargs[key] == 'False':
-                kwargs[key] = False
-            elif kwargs[key].replace('.', '', 1).isdigit():
-                kwargs[key] = float(kwargs[key])
-            elif kwargs[key].isdigit():
-                kwargs[key] = int(kwargs[key])
-            elif kwargs[key] == 'None':
-                kwargs[key] = None
+            try:
+                if kwargs[key] == 'True':
+                    kwargs[key] = True
+                elif kwargs[key] == 'False':
+                    kwargs[key] = False
+                elif kwargs[key][0].isdigit():
+                    if '.' in kwargs[key]:
+                        kwargs[key] = float(kwargs[key])
+                    elif ',' in kwargs[key] and "label" not in key:
+                        kwargs[key] = [int(x) for x in kwargs[key].split(',')]
+                    else:
+                        kwargs[key] = int(kwargs[key])
+                elif kwargs[key] == 'None':
+                    kwargs[key] = None
+                else:
+                    received_data = urllib.parse.unquote(kwargs[key])
+                    print("received_data", received_data)
+                    kwargs[key] = json.loads(received_data)
+            except Exception as e1:
+                try:
+                    print("key", kwargs[key])
+                    received_data = urllib.parse.unquote(kwargs[key])
+                    print("received_data", received_data)
+                    kwargs[key] = json.loads(received_data)
+                except Exception as e2:
+                    print("this error is", e1, e2)
+                    pass
+        
+        print(kwargs)
 
         kwargs['output_type'] = file_type
 
+        print("going to function")
         result = vis_functions[function_name](**kwargs)
         if file_type == 'png':
             
