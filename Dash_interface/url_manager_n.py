@@ -5,11 +5,11 @@ import dash_bootstrap_components as dbc
 
 def get_layout():
     return html.Div([dcc.Location(id='url', refresh=False),
-                    #   dbc.Button('share', id='share',outline=True, color="secondary", n_clicks=0, style={"position":"absolute", "right":"10px", "top":"10px"}),
-                    #   html.Div(id="share_dialog", children=[html.P(id='share_url'),
-                    #                                          html.Button('x', id='close_share_dialog', style={"position":"absolute", "right":"10px", "top":"10px"})
-                                                            # ], style={"display":"none"})
-                                                            ])
+                    #   html.Div(id="share_dialog", 
+                    #            children=[html.P(id='share_url'),
+                    #                      html.Button('x', id='close_share_dialog', style={"position":"absolute", "right":"10px", "top":"10px"})],
+                    #                     style={"display":"none"})])
+    ])
 
 def get_callbacks(app, set_up_arguments):
     @app.callback([Output('urlData', 'data'),
@@ -26,6 +26,20 @@ def get_callbacks(app, set_up_arguments):
             return data, deepcopy(data)
         except:
             return {}, "Error in URL"
+    
+    @app.callback(
+        Output("input_copy", "content"),
+        Input("input_copy", "n_clicks"),
+        State('InputData', 'data'),
+        State('url', 'href'))
+    def _share(n_clicks, data, href):
+        try:
+            f = furl(href)
+            for argument in set_up_arguments:
+                f.args[argument] = data[argument]
+            return f.url
+        except:
+            return "Error in URL"
 
     # @app.callback([Output('share_url', 'children'),
     #                 Output('share_dialog', 'style',  allow_duplicate=True)],
@@ -39,9 +53,9 @@ def get_callbacks(app, set_up_arguments):
     #         f = furl(href)
     #         # clear all arguments
     #         f.args = {}
-    #         for argument in set_up_arguments:
-    #             if data[set_up_arguments[argument]['name']] != set_up_arguments[argument]['defult']:
-    #                 f.args[set_up_arguments[argument]['short']] = data[set_up_arguments[argument]['name']]
+    #         # for argument in set_up_arguments:
+    #         #     if data[set_up_arguments[argument]['name']] != set_up_arguments[argument]['defult']:
+    #         #         f.args[set_up_arguments[argument]['short']] = data[set_up_arguments[argument]['name']]
     #         return f.url, {"position":"absolute", 'display': 'block', "width":"80vw", "height":"20vh", "top":"10vh", "left":"10vw", 
     #                        "background-color":"rgba(0,0,0,0.8)", "z-index":"3", "padding":"15px", "color":"white"}
     
