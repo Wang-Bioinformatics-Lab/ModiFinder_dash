@@ -129,6 +129,8 @@ def get_callbacks(app, diff_to_formula):
         
         main_compound = siteLocator.network.nodes[main_compound_id]['compound']
         modified_compound = siteLocator.network.nodes[modified_compound_id]['compound']
+        
+        print("in chart section", modified_compound.structure)
 
         delta_weight = abs(
                             main_compound.spectrum.precursor_mz
@@ -636,17 +638,17 @@ def get_callbacks(app, diff_to_formula):
         modified_compound = siteLocator.network.nodes[modified_compound_id]['compound']
         
         ind = main_compound.spectrum.get_peak_indexes(data["mz"])
-        main_compound.peak_fragments_map[ind[0]] = [data["all_fragments"][i] for i in data["selected_fragments"]]
+        main_compound.spectrum.peak_fragments_map[ind[0]] = [data["all_fragments"][i] for i in data["selected_fragments"]]
         
         fragmentsObj = {
-            "frags_map": main_compound.peak_fragments_map,
+            "frags_map": main_compound.spectrum.peak_fragments_map,
             "structure": main_compound.structure,
             "peaks": main_compound_peaks,
             "Precursor_MZ": main_compound.spectrum.precursor_mz,
         }
 
 
-        fragments = list(main_compound.peak_fragments_map[ind[0]])
+        fragments = list(main_compound.spectrum.peak_fragments_map[ind[0]])
         result_posibility_indicies = []
         for fragment in fragments:
             fragment_indicies = []

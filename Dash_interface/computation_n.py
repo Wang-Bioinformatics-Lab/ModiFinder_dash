@@ -4,6 +4,7 @@ import pickle
 import json
 import copy
 from modifinder import ModiFinder, Compound
+from rdkit import Chem
 
 def get_callbacks(app):
     
@@ -44,22 +45,30 @@ def get_callbacks(app):
         try:
             if data['adduct']:
                 args['adduct'] = data['adduct']
-            print(data['USI1'])
-            main_compound = Compound(data['USI1'], smiles=data['SMILES1'], **args)
-            mod_compound = Compound(data['USI2'], smiles=data['SMILES2'], **args)
+            main_compound = Compound(data['USI1'], **args)
+            if data["SMILES1"] is not None:
+                main_compound.update(smiles=data["SMILES1"])
+            mod_compound = Compound(data['USI2'], **args)
+            if data["SMILES2"] is not None:
+                if data["SMILES2"] !=  ".":
+                    mod_compound.update(smiles=data["SMILES2"])
+            if data["SMILES2"] is None:
+                mod_compound.structure = None
+            
         except Exception as e:
-            raise e
+            # raise e
             # if exception is of type value error, return the error message
             if type(e) == ValueError:
                 return None, None, None, None, str(e)
             # if exception is of type other, return the error message
             else:
-                return None, None, None, None, "Error loading main compound"
+                return None, None, None, None, "Error loading compounds"
         
-        if data["SMILES1"] == "" or data["SMILES1"] is None:
-            return None, None, None, None, None, "Error loading SMILES1"
+        if main_compound.structure is None:
+            return None, None, None, None, "Error loading SMILES1"
 
         siteLocator = ModiFinder(main_compound, mod_compound, helpers=helper_compounds)
+        
 
         if mod_compound.structure is not None:
             if not (mod_compound.structure.HasSubstructMatch(main_compound.structure) or main_compound.structure.HasSubstructMatch(mod_compound.structure)):
@@ -97,7 +106,7 @@ def get_callbacks(app):
         }
 
         fragmentsObj = {
-            "frags_map": main_compound.peak_fragments_map,
+            "frags_map": main_compound.spectrum.peak_fragments_map,
             "structure": main_compound.structure,
             "peaks": main_compound_peaks,
             "Precursor_MZ": main_compound.spectrum.precursor_mz,
