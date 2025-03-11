@@ -32,7 +32,7 @@ from furl import furl
 from myopic_mces import MCES
 
 # dash.register_page(__name__)
-#app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
+# app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
 dash_app = Dash(
     name="visualizer dashboard",
     server=app,
@@ -412,11 +412,11 @@ def update_spectra_output(Spec1, Spec2, boolean_inputs):
                 input = Spec2
             else:
                 input = Spec1
-            input = Spectrum(input)
+            input = Spectrum(input, ignore_adduct_format=True)
             png = mf_vis.draw_spectrum(input, **kwargs)
         else:
-            Spec1 = Spectrum(Spec1)
-            Spec2 = Spectrum(Spec2)
+            Spec1 = Spectrum(Spec1, ignore_adduct_format=True)
+            Spec2 = Spectrum(Spec2, ignore_adduct_format=True)
             cosine, matches = _cosine_fast(Spec1, Spec2, 0.1, 40, True)
             png = mf_vis.draw_alignment([Spec1, Spec2], [matches], **kwargs)
         
@@ -510,7 +510,7 @@ def api(function_name):
         return jsonify({'error': 'Function not found'}), 404
     try:
         args = request.args
-        kwargs = {}
+        kwargs = {"ignore_adduct_format": True}
         file_type = 'png'
         print(args)
         for key in args:
