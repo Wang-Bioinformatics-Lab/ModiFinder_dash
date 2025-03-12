@@ -129,8 +129,6 @@ def get_callbacks(app, diff_to_formula):
         
         main_compound = siteLocator.network.nodes[main_compound_id]['compound']
         modified_compound = siteLocator.network.nodes[modified_compound_id]['compound']
-        
-        print("in chart section", modified_compound.structure)
 
         delta_weight = abs(
                             main_compound.spectrum.precursor_mz
