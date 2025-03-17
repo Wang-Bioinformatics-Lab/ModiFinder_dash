@@ -27,7 +27,8 @@ def get_callbacks(app):
         args.pop('USI2', None)
         args["normalize_peaks"] = True
         args["remove_large_peaks"] = True
-        args["ratio_to_base_peak"] = args["filter_peaks_variable"]
+        args["ratio_to_base_peak"] = float(args["filter_peaks_variable"])
+        args['ppm_tolerance'] = float(args['ppm_tolerance'])
         helper_compounds = args.pop('Helpers', "").strip(' \t\n\r')
         helper_compounds = helper_compounds.replace(" ", "")
         helper_compounds = helper_compounds.split(",")
@@ -56,7 +57,7 @@ def get_callbacks(app):
                 mod_compound.structure = None
             
         except Exception as e:
-            # raise e
+            raise e
             # if exception is of type value error, return the error message
             if type(e) == ValueError:
                 return None, None, None, None, str(e)
@@ -67,7 +68,7 @@ def get_callbacks(app):
         if main_compound.structure is None:
             return None, None, None, None, "Error loading SMILES1"
 
-        siteLocator = ModiFinder(main_compound, mod_compound, helpers=helper_compounds)
+        siteLocator = ModiFinder(main_compound, mod_compound, helpers=helper_compounds, **args)
         
 
         if mod_compound.structure is not None:
