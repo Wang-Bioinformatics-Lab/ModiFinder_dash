@@ -19,7 +19,7 @@ RUN mamba env create -f conda-env.yml -n smallmol_mod_site_localization_dash
 #COPY ModiFinder_base /app/ModiFinder_base
 #RUN /bin/bash -c "source activate smallmol_mod_site_localization_dash && pip install -e /app/ModiFinder_base"
 
-RUN /bin/bash -c "source activate smallmol_mod_site_localization_dash && pip install modifinder==1.5.5"
+RUN /bin/bash -c "source activate smallmol_mod_site_localization_dash && pip install modifinder==1.5.6"
 
 COPY . /app
 WORKDIR /app
