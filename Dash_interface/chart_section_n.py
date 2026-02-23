@@ -672,6 +672,7 @@ def get_callbacks(app, diff_to_formula):
         Output("download_heatmap_svg", "data"),
         Input("download_svg_button", "n_clicks"),
         State("hidden_svg", "children"),
+        prevent_initial_call=True,
     )
     def download_svg(n_clicks, svg):
         if n_clicks:
