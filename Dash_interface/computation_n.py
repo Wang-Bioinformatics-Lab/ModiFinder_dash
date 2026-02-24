@@ -412,10 +412,10 @@ def get_callbacks(app):
         
         spectrum1 = get_data(usi1)
         spectrum2 = get_data(usi2)
-        if spectrum1['adduct'] is None:
+        if spectrum1.get('adduct') is None:
             # Replace with adduct from data
             spectrum1['adduct'] = data.get('adduct', None)
-        if spectrum2['adduct'] is None:
+        if spectrum2.get('adduct') is None:
             # Replace with adduct from data
             spectrum2['adduct'] = data.get('adduct', None)
 
@@ -528,7 +528,7 @@ def get_callbacks(app):
         }
 
         fragmentsObj = {
-            "frags_map": main_compound.spectrum.peak_fragments_map,
+            "frags_map": main_compound.spectrum.peak_fragment_dict,
             "structure": main_compound.structure,
             "peaks": main_compound_peaks,
             "Precursor_MZ": main_compound.spectrum.precursor_mz,
