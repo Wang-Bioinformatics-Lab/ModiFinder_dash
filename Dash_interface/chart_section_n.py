@@ -1,3 +1,5 @@
+import sys
+
 from dash import Dash, html, dcc, Input, Output, State, dash_table, Patch
 from dash.exceptions import PreventUpdate
 import pickle
@@ -303,6 +305,11 @@ def get_callbacks(app, diff_to_formula):
         main_precursor_mz = peaksObj["main_precursor_mz"]
         mod_precursor_mz = peaksObj["mod_precursor_mz"]
 
+        # Convert m/z values back down from keys
+        main_compound_peaks = [(mz/1e6, intensity) for mz, intensity in main_compound_peaks]
+        mod_compound_peaks = [(mz/1e6, intensity) for mz, intensity in mod_compound_peaks]
+        matched_peaks = [(main_mz/1e6, mod_mz/1e6) for main_mz, mod_mz in matched_peaks]
+
         fig = go.Figure()
         typesInxMain = {"matched_shifted": [], "matched_unshifted": [], "unmatched": []}
 
@@ -331,9 +338,9 @@ def get_callbacks(app, diff_to_formula):
                         )
                         > args["mz_tolerance"]
                     ):
-                        typesInxMain["matched_shifted"].append([main_match_mz, y1[i], f"Shifted Matched ({mod_match_mz:.2f}, {main_compound_peaks[i][0]:.2f})"])
+                        typesInxMain["matched_shifted"].append([main_match_mz, y1[i], f"{mod_match_mz:.2f}:{main_compound_peaks[i][0]:.2f}"])
                     else:
-                        typesInxMain["matched_unshifted"].append([main_match_mz, y1[i], f"Matched ({mod_match_mz:.2f}, {main_compound_peaks[i][0]:.2f})"])
+                        typesInxMain["matched_unshifted"].append([main_match_mz, y1[i], f"{mod_match_mz:.2f}:{main_compound_peaks[i][0]:.2f}"])
                     flag = True
                     break                
             if not flag:
@@ -367,10 +374,10 @@ def get_callbacks(app, diff_to_formula):
                         )
                         > args["mz_tolerance"]
                     ):
-                        typesInxModified["matched_shifted"].append([mod_match_mz, -y2[i], f"Shifted Matched ({main_match_mz:.2f}, {mod_compound_peaks[i][0]:.2f})"])
+                        typesInxModified["matched_shifted"].append([mod_match_mz, -y2[i], f"{main_match_mz:.2f}:{mod_compound_peaks[i][0]:.2f}"])
                         # hoverData["modified"].append(j[0])
                     else:
-                        typesInxModified["matched_unshifted"].append([mod_match_mz, -y2[i], f"Matched ({main_match_mz:.2f}, {mod_compound_peaks[i][0]:.2f})"])
+                        typesInxModified["matched_unshifted"].append([mod_match_mz, -y2[i], f"{main_match_mz:.2f}:{mod_compound_peaks[i][0]:.2f}"])
                     flag = True
                     break
             if not flag:
@@ -387,7 +394,13 @@ def get_callbacks(app, diff_to_formula):
 
             x = [j[0] for j in typesInxMain[inx_type]] + [j[0] for j in typesInxModified[inx_type]]
             y = [j[1] for j in typesInxMain[inx_type]] + [j[1] for j in typesInxModified[inx_type]]
-            y = [y_i / max(y) * 100 for y_i in y]
+            # Separate norm constants for pos and neg y
+            if len(y) == 0:
+                continue
+            
+            max_y = max(y) if max(y) > 0 else 1
+            min_y = min(y) if min(y) < 0 else -1
+            y = [y_i / max_y * 100 if y_i > 0 else -(y_i / min_y) * 100 for y_i in y]
             hovertext = [j[2] for j in typesInxMain[inx_type]] + [j[2] for j in typesInxModified[inx_type]]
             colors = [colorsInxMain[inx_type]] * len(x)
             if inx_type == "unmatched":
@@ -498,17 +511,24 @@ def get_callbacks(app, diff_to_formula):
                 
                 structure = fragmentsObj["structure"]
                 frags_map = fragmentsObj["frags_map"]
-                peaks = fragmentsObj["peaks"]
+                peak_keys     = [int(x[0]) for x in fragmentsObj["peaks"]]
 
-                peak_index = -1
-                for i, peak in enumerate(peaks):
-                    if abs(peak[0]- clicked_peak_x)/clicked_peak_x*1000000 < 40:
-                        peak_index = i
+                peak_key = None
+                for k in peak_keys:
+                    if abs((k/1e6)- clicked_peak_x)/clicked_peak_x*1000000 < 40:
+                        peak_key = k   # Cast to int (numpy ints won't key)
                         break
-                if peak_index == -1:
-                    return "error in finding peak index"
+                if peak_key is None:
+                    raise ValueError(f"Clicked peak not found in peaks list "f"(clicked_peak_x: {clicked_peak_x}, peaks: {peak_keys})")
                 
-                fragments = list(frags_map[peak_index])
+                try:
+                    fragments = list(frags_map[peak_key])
+                except KeyError:
+                    # Check for the closest key
+                    closest_key = min(frags_map.keys(), key=lambda k: abs(k/1e6 - clicked_peak_x))
+
+                    raise ValueError(f"Fragment map does not contain peak key {peak_key} (type {type(peak_key)}), closest key is {closest_key} (type {type(closest_key)} with m/z {closest_key/1e6}, clicked m/z was {clicked_peak_x}")
+                
                 result_posibility_indicies = []
                 for fragment in fragments:
                     fragment_indicies = []
@@ -529,9 +549,9 @@ def get_callbacks(app, diff_to_formula):
                 )
             except:
                 import traceback
-
-                traceback.print_exc()
+                traceback.print_exc(file=sys.stderr)
                 return "siteLocator object not found"
+            
         return None
 
     # change the color of the bar when clicked
@@ -564,9 +584,9 @@ def get_callbacks(app, diff_to_formula):
                             # figure["data"][i]["marker"]["color"][j] = "green"
                             # if matched shifted peak, highlight the corresponding peak in the other bar
                             if figure["data"][i]["name"] == "matched_shifted":
-                                index = figure["data"][i]["hovertext"][j].split(":")[1]
+                                peak_x = str(figure["data"][i]["hovertext"][j].split(":")[0]).strip()
                                 for l in range(len(figure["data"][i]["x"])):
-                                    if (figure["data"][i]["hovertext"][l].split(" ")[0] == index and figure["data"][i]["y"][l] < 0):
+                                    if (str(figure["data"][i]["hovertext"][l].split(':')[1]).strip() == peak_x and figure["data"][i]["y"][l] < 0):
                                         patched_figure["data"][i]["marker"]["color"][l] = "olive"
                                         break
 
@@ -582,7 +602,7 @@ def get_callbacks(app, diff_to_formula):
     @app.callback(
         [Output("siteLocatorObj", "data", allow_duplicate=True), 
          Output("peak_info", "children", allow_duplicate=True),
-         Output('fragmentsObj', 'data', allow_duplicate=True)],
+         Output("fragmentsObj", "data", allow_duplicate=True)],
         Input(FragmentsDisplayAIO.ids.fragment_data("fragmentDisplay"), "data"),
         State("siteLocatorObj", "data"),
         prevent_initial_call=True,
@@ -597,11 +617,11 @@ def get_callbacks(app, diff_to_formula):
         modified_compound_id = siteLocator._get_unknown()
         main_compound_id = siteLocator._get_known_neighbor(modified_compound_id)
         main_compound = siteLocator.network.nodes[main_compound_id]['compound']
-        main_compound_peaks = [(main_compound.spectrum.mz[i], main_compound.spectrum.intensity[i]) for i in range(len(main_compound.spectrum.mz))]
+        main_compound_peaks = [(main_compound.spectrum.mz_key[i], main_compound.spectrum.intensity[i]) for i in range(len(main_compound.spectrum.mz_key))]
         modified_compound = siteLocator.network.nodes[modified_compound_id]['compound']
         
         mzs = data["mz"]
-        main_compound.spectrum.peak_fragment_dict[mzs[0]] = [data["all_fragments"][i] for i in data["selected_fragments"]]
+        main_compound.spectrum.peak_fragment_dict[int(mzs[0])] = [data["all_fragments"][i] for i in data["selected_fragments"]]
         
         fragmentsObj = {
             "frags_map": main_compound.spectrum.peak_fragment_dict,
@@ -611,7 +631,7 @@ def get_callbacks(app, diff_to_formula):
         }
 
 
-        fragments = list(main_compound.spectrum.peak_fragment_dict[mzs[0]])
+        fragments = list(main_compound.spectrum.peak_fragment_dict[int(mzs[0])])
         result_posibility_indicies = []
         for fragment in fragments:
             fragment_indicies = []

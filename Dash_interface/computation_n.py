@@ -17,10 +17,12 @@ from datetime import datetime
 adduct_mapping = {'M+H': '[M+H]+',
 '[M+H]': '[M+H]+',
 '[M+H]+': '[M+H]+',
+'[M+H]1+': '[M+H]+',
 'M+H]': '[M+H]+',
 'M+Na': '[M+Na]+',
 '[M+Na]': '[M+Na]+',
 '[M+Na]+': '[M+Na]+',
+'[M+Na]1+': '[M+Na]+',
 '2M+Na': '[2M+Na]+',
 'M2+Na': '[2M+Na]+',
 '[2M+Na]+': '[2M+Na]+',
@@ -28,6 +30,7 @@ adduct_mapping = {'M+H': '[M+H]+',
 'M+K': '[M+K]+',
 '[M+K]': '[M+K]+',
 '[M+K]+': '[M+K]+',
+'[M+K]1+': '[M+K]+',
 '[2M+K]+': '[2M+K]+',
 '2M+K': '[2M+K]+',
 '[2M+K]': '[2M+K]+',
@@ -46,6 +49,7 @@ adduct_mapping = {'M+H': '[M+H]+',
 'M-H': '[M-H]-',
 '[M-H]': '[M-H]-',
 '[M-H]-': '[M-H]-',
+'[M-H]1-': '[M-H]-',
 'M-H-': '[M-H]-',
 'M-H1': '[M-H]-',
 '3M+Na': '[3M+Na]+',
@@ -79,6 +83,7 @@ adduct_mapping = {'M+H': '[M+H]+',
 '[2M-H+HCOOH]': '[2M+HCOOH-H]-',
 'M+NH4': '[M+NH3+H]+',
 '[M+NH4]+': '[M+NH3+H]+',
+'[M+NH4]1+': '[M+NH3+H]+',
 '[M+NH4]': '[M+NH3+H]+',
 '2M+Hac-H': '[2M+CH3COOH-H]-',
 '2M-H': '[2M-H]-',
@@ -120,6 +125,7 @@ adduct_mapping = {'M+H': '[M+H]+',
 'M+Cl-': '[M+Cl]-',
 'M+Cl': '[M+Cl]-',
 '[M+Cl]': '[M+Cl]-',
+'[M+Cl]1-': '[M+Cl]-',
 'M+K-2H': '[M-2H+K]-',
 '[M-2H+K]': '[M-2H+K]-',
 'M-2H]': '[M-2H]2-',
@@ -128,6 +134,7 @@ adduct_mapping = {'M+H': '[M+H]+',
 'M+Na-2H': '[M-2H+Na]-',
 '[M-2H+Na]': '[M-2H+Na]-',
 'M+Br': '[M+Br]-',
+'[M+Br]1-': '[M+Br]-',
 '3M-H': '[3M-H]-',
 '[3M-H]': '[3M-H]-',
 '[M+H+CH3OH]': '[M+CH3OH+H]+',
@@ -203,10 +210,10 @@ def filter_peaks_by_ratio_to_base_peak(spectrum, ratio_to_base_peak:float = 0.01
         new_intensity = []
         for index, intensity in enumerate(spectrum.intensity):
             if intensity >= float(ratio_to_base_peak) * base_peak:
-                new_mz.append(spectrum.mz[index])
+                new_mz.append(spectrum.mz_key[index]) # TODO, swap back once mz_key full integrated
                 new_intensity.append(intensity)
         
-        spectrum.mz = new_mz
+        spectrum.mz_key = new_mz
         spectrum.intensity = new_intensity
 
         return spectrum
@@ -218,12 +225,12 @@ def remove_larger_than_precursor_peaks(spectrum):
         
         new_mz = []
         new_intensity = []
-        for mz, intensity in zip(spectrum.mz, spectrum.intensity):
-            if mz < spectrum.precursor_mz * 0.99:
+        for mz, intensity in zip(spectrum.mz_key, spectrum.intensity): # TODO, swap back once mz_key full integrated
+            if mz < (spectrum.precursor_mz * 1e6)* 0.99:
                 new_mz.append(mz)
                 new_intensity.append(intensity)
         
-        spectrum.mz = new_mz
+        spectrum.mz_key = new_mz
         spectrum.intensity = new_intensity
 
         return spectrum
@@ -320,7 +327,6 @@ def get_data(identifier: str) -> dict:
             # Sort peaks if needed
             if 'peaks' in data and isinstance(data['peaks'], list) and len(data['peaks']) > 0:
                 data['peaks'] = sorted(data['peaks'], key=lambda x: x[0])
-
             return data
 
     link = "https://external.gnps2.org/gnpsspectrum?SpectrumID={}".format(identifier)
@@ -353,7 +359,6 @@ def get_data(identifier: str) -> dict:
     # Ensure peaks are sorted
     if 'peaks' in data and isinstance(data['peaks'], list) and len(data['peaks']) > 0:
         data['peaks'] = sorted(data['peaks'], key=lambda x: x[0])
-
     return data
 
 def load_helpers(
@@ -393,7 +398,13 @@ def load_helpers(
 def get_callbacks(app):
     
     @app.callback(
-        [Output('siteLocatorObj', 'data'),  Output('siriusData', 'children'), Output('peaksObj', 'data'), Output('fragmentsObj', 'data')], Output('error-input', 'children'),
+        [
+            Output('siteLocatorObj', 'data'),
+            Output('siriusData', 'children'),
+            Output('peaksObj', 'data'),
+            Output('fragmentsObj', 'data')
+         ],
+         Output('error-input', 'children'),
         Input('InputData', 'data'),
         )
     def calculate_module(data):
@@ -414,10 +425,10 @@ def get_callbacks(app):
         spectrum2 = get_data(usi2)
         if spectrum1.get('adduct') is None:
             # Replace with adduct from data
-            spectrum1['adduct'] = data.get('adduct', None)
+            spectrum1['adduct'] = adduct_mapping[data['adduct']]    # Should raise error here if we don't know what it is
         if spectrum2.get('adduct') is None:
             # Replace with adduct from data
-            spectrum2['adduct'] = data.get('adduct', None)
+            spectrum2['adduct'] = adduct_mapping[data['adduct']]
 
         # TODO: What to do if adduct differs at this point?
 
@@ -449,8 +460,9 @@ def get_callbacks(app):
             data["SMILES2"] = None
 
         try:
-            if data['adduct']:
-                args['adduct'] = data['adduct']
+            # Use known compound adduct
+            args['adduct'] = spectrum1.get('adduct', None)
+
             main_compound = Compound(
                 spectrum=spectrum1['peaks'],
                 precursor_mz=spectrum1['precursor_mz'],
@@ -490,48 +502,18 @@ def get_callbacks(app):
             mod_compound.spectrum = remove_larger_than_precursor_peaks(mod_compound.spectrum)
 
         siteLocator = ModiFinder(main_compound, mod_compound, helpers=helper_compounds, **args)
-        
 
-        if mod_compound.structure is not None:
-            if not (mod_compound.structure.HasSubstructMatch(main_compound.structure) or main_compound.structure.HasSubstructMatch(mod_compound.structure)):
-                return None, None, None, None, "None of the structures are substructures of the other"
-            if mod_compound.structure.HasSubstructMatch(main_compound.structure) and main_compound.structure.HasSubstructMatch(mod_compound.structure):
-                return None, None, None, None, "Structures are the same"
+        peaksObj, fragmentsObj = siteLocator.get_result()
         
         siriusText = "SIRIUS data was not available"
-        # else:
-        #     print("SIRIUS data was not available", data['USI1'])
-        # if siteLocator.main_compound.Precursor_MZ > siteLocator.modified_compound.Precursor_MZ:
-        #     return None, "Molecule precursor mass is higher than modified precursor mass", siriusText
-        # else:
+       
         args = copy.deepcopy(data)
         # remove SMILES and USI from args
         args.pop('SMILES1', None)
         args.pop('SMILES2', None)
         args.pop('USI1', None)
         args.pop('USI2', None)
-        
-        main_compound_peaks = [(main_compound.spectrum.mz[i], main_compound.spectrum.intensity[i]) for i in range(len(main_compound.spectrum.mz))]
-        mod_compound_peaks = [(mod_compound.spectrum.mz[i], mod_compound.spectrum.intensity[i]) for i in range(len(mod_compound.spectrum.mz))]
-        matched_peaks = siteLocator.get_edge_detail(main_compound.id, mod_compound.id)
-        if matched_peaks is None:
-            matched_peaks = []
-        else:
-            matched_peaks = matched_peaks.get_matches_pairs()
-        peaksObj = {
-            "main_compound_peaks": main_compound_peaks,
-            "mod_compound_peaks": mod_compound_peaks,
-            "matched_peaks": matched_peaks,
-            "args": args,
-            "main_precursor_mz": main_compound.spectrum.precursor_mz,
-            "mod_precursor_mz": mod_compound.spectrum.precursor_mz,
-        }
 
-        fragmentsObj = {
-            "frags_map": main_compound.spectrum.peak_fragment_dict,
-            "structure": main_compound.structure,
-            "peaks": main_compound_peaks,
-            "Precursor_MZ": main_compound.spectrum.precursor_mz,
-        }
+        peaksObj.update({"args": args})
 
         return base64.b64encode(pickle.dumps(siteLocator)).decode(),  siriusText, base64.b64encode(pickle.dumps(peaksObj)).decode(), base64.b64encode(pickle.dumps(fragmentsObj)).decode(), None
