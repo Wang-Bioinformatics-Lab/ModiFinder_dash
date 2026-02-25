@@ -117,11 +117,11 @@ DRAW_MOLECULE =  html.Div([
     html.H1("Molecule Drawer"),
     dbc.Card([
     dbc.InputGroup(
-            [dbc.InputGroupText('Smiles1'), dbc.Input(placeholder='SMILES, InChI, Spectrum ID, or USI',id='Mol1', value = "")],
+            [dbc.InputGroupText('Smiles1'), dbc.Input(placeholder='SMILES or InChI',id='Mol1', value = "")],
             style = {'width': '90vw', 'margin': '1vh auto'}
     ),
     dbc.InputGroup(
-            [dbc.InputGroupText('Smiles2'), dbc.Input(placeholder='SMILES, InChI, Spectrum ID, or USI',id='Mol2', value = "")],
+            [dbc.InputGroupText('Smiles2'), dbc.Input(placeholder='SMILES or InChI',id='Mol2', value = "")],
             style = {'width': '90vw', 'margin': '1vh auto'}
     ),
     dbc.Checklist(
