@@ -428,7 +428,10 @@ def update_spectra_output(Spec1, Spec2, boolean_inputs):
             Spec1 = Spectrum(**data1, ignore_adduct_format=True)
             Spec2 = Spectrum(**data2, ignore_adduct_format=True)
             cosine, matches = _cosine_fast(Spec1, Spec2, 0.1, 40, True)
-            png = mf_vis.draw_alignment([Spec1, Spec2], [matches], **kwargs)
+            # Convert matches to mz keys
+            match_keys = [(Spec1.mz_key[idx1], Spec2.mz_key[idx2]) for idx1, idx2 in matches]
+
+            png = mf_vis.draw_alignment([Spec1, Spec2], [match_keys], **kwargs)
         
         img = png_to_showable_src(png)
         return html.Img(src=img, style={'margin': 'auto', 'height': '50vh'})
