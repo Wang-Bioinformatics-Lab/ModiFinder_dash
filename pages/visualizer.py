@@ -28,6 +28,8 @@ from modifinder.engines.alignment.CosineAlignmentEngine import _cosine_fast
 from flask import Flask, send_file, request, jsonify
 import json
 from app import app
+from app_utils import get_data
+import traceback
 from furl import furl
 from myopic_mces import MCES
 
@@ -117,11 +119,11 @@ DRAW_MOLECULE =  html.Div([
     html.H1("Molecule Drawer"),
     dbc.Card([
     dbc.InputGroup(
-            [dbc.InputGroupText('Smiles1'), dbc.Input(placeholder='SMILES, InChI, Spectrum ID, or USI',id='Mol1', value = "")],
+            [dbc.InputGroupText('Smiles1'), dbc.Input(placeholder='SMILES or InChI',id='Mol1', value = "")],
             style = {'width': '90vw', 'margin': '1vh auto'}
     ),
     dbc.InputGroup(
-            [dbc.InputGroupText('Smiles2'), dbc.Input(placeholder='SMILES, InChI, Spectrum ID, or USI',id='Mol2', value = "")],
+            [dbc.InputGroupText('Smiles2'), dbc.Input(placeholder='SMILES or InChI',id='Mol2', value = "")],
             style = {'width': '90vw', 'margin': '1vh auto'}
     ),
     dbc.Checklist(
@@ -173,7 +175,8 @@ CONTRIBUTORS_DASHBOARD = [
     dbc.CardHeader(html.H5("Contributors")),
     dbc.CardBody(
         [
-            "Reza Shahneh - UC Riverside",
+            "Reza Shahneh, Ph.D. - UC Riverside", html.Br(),
+            "Michael Strobel - UC Riverside",
             html.Br(),
             html.Br(),
             html.H5("Citation"),
@@ -412,17 +415,28 @@ def update_spectra_output(Spec1, Spec2, boolean_inputs):
                 input = Spec2
             else:
                 input = Spec1
-            input = Spectrum(input, ignore_adduct_format=True)
+
+            data = get_data(input)
+            input = Spectrum(**data, ignore_adduct_format=True)
+
             png = mf_vis.draw_spectrum(input, **kwargs)
         else:
-            Spec1 = Spectrum(Spec1, ignore_adduct_format=True)
-            Spec2 = Spectrum(Spec2, ignore_adduct_format=True)
+
+            data1 = get_data(Spec1)
+            data2 = get_data(Spec2)
+
+            Spec1 = Spectrum(**data1, ignore_adduct_format=True)
+            Spec2 = Spectrum(**data2, ignore_adduct_format=True)
             cosine, matches = _cosine_fast(Spec1, Spec2, 0.1, 40, True)
-            png = mf_vis.draw_alignment([Spec1, Spec2], [matches], **kwargs)
+            # Convert matches to mz keys
+            match_keys = [(Spec1.mz_key[idx1], Spec2.mz_key[idx2]) for idx1, idx2 in matches]
+
+            png = mf_vis.draw_alignment([Spec1, Spec2], [match_keys], **kwargs)
         
         img = png_to_showable_src(png)
         return html.Img(src=img, style={'margin': 'auto', 'height': '50vh'})
     except Exception as e:
+        print(traceback.format_exc(), file=sys.stderr)
         return str(e)
 
 

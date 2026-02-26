@@ -2,5 +2,5 @@ version: '3'
 services:
   mod-site:
     volumes:
-      - /home/user/LabData/Reza/data:/app/data:rw
+      - /nas-services/data_resources/modifinder:/app/data:ro
     
