@@ -7,7 +7,6 @@ services:
     container_name: mod-site
     volumes:
       - ./logs:/app/logs:rw
-      - ./data:/app/data:rw
     ports:
     - "5999:5002"
     networks:
