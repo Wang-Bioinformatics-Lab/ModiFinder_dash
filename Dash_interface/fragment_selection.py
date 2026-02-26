@@ -88,7 +88,7 @@ class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
                 ),
             ],
         )
-        print("fragments_indicies", fragments_indicies)
+
         self.aio_id = aio_id
         super().__init__(
             children=[
