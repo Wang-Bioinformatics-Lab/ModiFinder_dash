@@ -77,7 +77,9 @@ CONTRIBUTORS_DASHBOARD = [
     dbc.CardHeader(html.H5("Contributors")),
     dbc.CardBody(
         [
-            "Reza Shahneh - UC Riverside",
+            "Reza Shahneh, Ph.D. - UC Riverside",
+            "Michael Strobel - UC Riverside",
+            "Xianghu Wang - UC Riverside",
             html.Br(),
             html.Br(),
             html.H5("Citation"),
