@@ -59,9 +59,17 @@ class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
     # Make the ids class a public class
     ids = ids
 
-    def __init__(self, fragments_indicies, mol, info, aio_id=None, *args, **kwargs):
+    def __init__(self, fragments_indicies, mol, info, aio_id=None, selected=None, *args, **kwargs):
+        """
+        fragments_indicies: list of atom-index lists, one per candidate fragment (same order as info["all_fragments"])
+        info: dict with "mz", "intensity", "peak_key" and "all_fragments" (all candidate fragment bitmasks)
+        selected: indices of the candidates that are currently assigned to the peak (default: all)
+        """
         if aio_id is None:
             aio_id = str(uuid.uuid4())
+        if selected is None:
+            selected = list(range(len(fragments_indicies)))
+        selected = sorted(selected)
 
         # self.mode = "display"
         # self.mol = mol
@@ -71,8 +79,9 @@ class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
         data = {
             "mz": info["mz"],
             "intensity": info["intensity"],
+            "peak_key": info.get("peak_key"),
             "all_fragments": info["all_fragments"],
-            "selected_fragments": [i for i in range(len(fragments_indicies))],
+            "selected_fragments": selected,
             "has_changed": False,
         }
 
@@ -103,7 +112,7 @@ class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
                 
 
                 dcc.Checklist(
-                    [
+                    sorted([
                         {
                             "label": html.Img(
                                 src=dash_svg(
@@ -115,8 +124,8 @@ class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
                             "disabled": True,
                         }
                         for i, fragment in enumerate(fragments_indicies)
-                    ],
-                    value=[i for i in range(len(fragments_indicies))],
+                    ], key=lambda option: option["value"] not in selected),
+                    value=selected,
                     id=self.ids.fragment_selection(self.aio_id),
                     inline=True,
                 ),
@@ -137,7 +146,7 @@ class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
     
     # select all fragments
     @callback(
-        Output(ids.fragment_selection(MATCH), "value"),
+        Output(ids.fragment_selection(MATCH), "value", allow_duplicate=True),
         Input(ids.select_all(MATCH), "n_clicks"),
         State(ids.fragment_data(MATCH), "data"),
         prevent_initial_call=True,
@@ -177,7 +186,8 @@ class FragmentsDisplayAIO(html.Div):  # html.Div will be the "parent" component
                 for option in options
             ]
             # check if the selected fragments have changed
-            if data["selected_fragments"] != selected_fragments:
+            selected_fragments = sorted(selected_fragments or [])
+            if sorted(data["selected_fragments"]) != selected_fragments:
                 data["selected_fragments"] = selected_fragments
                 data["has_changed"] = True
                 # print("selected_fragments changed")

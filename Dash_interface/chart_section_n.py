@@ -22,6 +22,37 @@ def dash_svg(text):
     except:
         return None
 
+def _fragment_to_atom_indices(fragment, num_atoms):
+    return [i for i in range(num_atoms) if fragment & (1 << i)]
+
+
+def build_fragment_display(fragmentsObj, peak_key, mz, intensity):
+    """
+    Builds the fragment selection panel for a peak.
+    All candidate fragments (the original annotation) are shown, the ones currently
+    assigned to the peak are checked, so a deselected fragment can be selected again later.
+    """
+    structure = fragmentsObj["structure"]
+    current = set(fragmentsObj["frags_map"].get(peak_key, set()))
+    original = fragmentsObj.get("original_frags_map", {}).get(peak_key, current)
+    candidates = sorted(set(original) | current)
+    selected = [i for i, fragment in enumerate(candidates) if fragment in current]
+    num_atoms = structure.GetNumAtoms()
+
+    return FragmentsDisplayAIO(
+        [_fragment_to_atom_indices(fragment, num_atoms) for fragment in candidates],
+        structure,
+        {
+            "mz": mz,
+            "intensity": intensity,
+            "peak_key": int(peak_key),
+            "all_fragments": candidates,
+        },
+        "fragmentDisplay",
+        selected=selected,
+    )
+
+
 def get_layout():
     # print("in get layout")
     return html.Div(
@@ -509,43 +540,23 @@ def get_callbacks(app, diff_to_formula):
                 if clicked_peak_x > fragmentsObj["Precursor_MZ"] - 1:
                     return "precursor peak, " + str(clicked_peak_x)
                 
-                structure = fragmentsObj["structure"]
                 frags_map = fragmentsObj["frags_map"]
-                peak_keys     = [int(x[0]) for x in fragmentsObj["peaks"]]
+                peak_keys = [int(x[0]) for x in fragmentsObj["peaks"]]  # Cast to int (numpy ints won't key)
 
-                peak_key = None
-                for k in peak_keys:
-                    if abs((k/1e6)- clicked_peak_x)/clicked_peak_x*1000000 < 40:
-                        peak_key = k   # Cast to int (numpy ints won't key)
-                        break
-                if peak_key is None:
+                # closest peak within 40 ppm
+                peak_key = min(peak_keys, key=lambda k: abs(k/1e6 - clicked_peak_x), default=None)
+                if peak_key is None or abs(peak_key/1e6 - clicked_peak_x)/clicked_peak_x*1000000 >= 40:
                     raise ValueError(f"Clicked peak not found in peaks list "f"(clicked_peak_x: {clicked_peak_x}, peaks: {peak_keys})")
-                
-                try:
-                    fragments = list(frags_map[peak_key])
-                except KeyError:
-                    # Check for the closest key
-                    closest_key = min(frags_map.keys(), key=lambda k: abs(k/1e6 - clicked_peak_x))
 
+                if peak_key not in frags_map:
+                    closest_key = min(frags_map.keys(), key=lambda k: abs(k/1e6 - clicked_peak_x))
                     raise ValueError(f"Fragment map does not contain peak key {peak_key} (type {type(peak_key)}), closest key is {closest_key} (type {type(closest_key)} with m/z {closest_key/1e6}, clicked m/z was {clicked_peak_x}")
-                
-                result_posibility_indicies = []
-                for fragment in fragments:
-                    fragment_indicies = []
-                    for i in range(len(structure.GetAtoms())):
-                        if fragment & 1 << i:
-                            fragment_indicies.append(i)
-                    result_posibility_indicies.append(fragment_indicies)
-                
-                return FragmentsDisplayAIO(
-                    result_posibility_indicies,
-                    structure,
-                    {
-                        "mz": clickData["points"][0]["x"],
-                        "intensity": clickData["points"][0]["y"],
-                        "all_fragments": fragments,
-                    },
-                    "fragmentDisplay",
+
+                return build_fragment_display(
+                    fragmentsObj,
+                    peak_key,
+                    clickData["points"][0]["x"],
+                    clickData["points"][0]["y"],
                 )
             except:
                 import traceback
@@ -574,7 +585,7 @@ def get_callbacks(app, diff_to_formula):
                 clicked_peak_x = float(clickData["points"][0]["x"])
                 clicked_peak_y = float(clickData["points"][0]["y"])
                 if clicked_peak_y < 0:
-                    return figure
+                    return patched_figure
                 for i in range(len(figure["data"])):
                     for j in range(len(figure["data"][i]["x"])):
                         if (figure["data"][i]["x"][j] == clicked_peak_x) and (
@@ -605,13 +616,18 @@ def get_callbacks(app, diff_to_formula):
          Output("fragmentsObj", "data", allow_duplicate=True)],
         Input(FragmentsDisplayAIO.ids.fragment_data("fragmentDisplay"), "data"),
         State("siteLocatorObj", "data"),
+        State("fragmentsObj", "data"),
         prevent_initial_call=True,
     )
-    def apply_structure_filter(data, siteLocatorObj):
-        if siteLocatorObj == None:
+    def apply_structure_filter(data, siteLocatorObj, prev_fragmentsObj):
+        if siteLocatorObj is None or data is None:
             raise PreventUpdate
-        if data["has_changed"] == False:
+        if not data.get("has_changed"):
             raise PreventUpdate
+        peak_key = data.get("peak_key")
+        if peak_key is None:
+            raise PreventUpdate
+        peak_key = int(peak_key)
         siteLocator = pickle.loads(base64.b64decode(siteLocatorObj))
         
         modified_compound_id = siteLocator._get_unknown()
@@ -620,36 +636,27 @@ def get_callbacks(app, diff_to_formula):
         main_compound_peaks = [(main_compound.spectrum.mz_key[i], main_compound.spectrum.intensity[i]) for i in range(len(main_compound.spectrum.mz_key))]
         modified_compound = siteLocator.network.nodes[modified_compound_id]['compound']
         
-        mzs = data["mz"]
-        main_compound.spectrum.peak_fragment_dict[int(mzs[0])] = [data["all_fragments"][i] for i in data["selected_fragments"]]
-        
+        frags_map = main_compound.spectrum.peak_fragment_dict
+
+        # keep the original annotation so deselected fragments can be re-selected later
+        original_frags_map = None
+        if prev_fragmentsObj is not None:
+            original_frags_map = pickle.loads(base64.b64decode(prev_fragmentsObj)).get("original_frags_map")
+        if original_frags_map is None:
+            original_frags_map = {k: set(v) for k, v in frags_map.items()}
+
+        # peak_fragment_dict values are sets throughout modifinder
+        frags_map[peak_key] = set(data["all_fragments"][i] for i in data["selected_fragments"])
+
         fragmentsObj = {
-            "frags_map": main_compound.spectrum.peak_fragment_dict,
+            "frags_map": frags_map,
+            "original_frags_map": original_frags_map,
             "structure": main_compound.structure,
             "peaks": main_compound_peaks,
             "Precursor_MZ": main_compound.spectrum.precursor_mz,
         }
 
-
-        fragments = list(main_compound.spectrum.peak_fragment_dict[int(mzs[0])])
-        result_posibility_indicies = []
-        for fragment in fragments:
-            fragment_indicies = []
-            for i in range(len(main_compound.structure.GetAtoms())):
-                if fragment & 1 << i:
-                    fragment_indicies.append(i)
-            result_posibility_indicies.append(fragment_indicies)
-
-        new_peak_info = FragmentsDisplayAIO(
-            result_posibility_indicies,
-            main_compound.structure,
-            {
-                "mz": data["mz"],
-                "intensity": data["intensity"],
-                "all_fragments": fragments,
-            },
-            "fragmentDisplay",
-        )
+        new_peak_info = build_fragment_display(fragmentsObj, peak_key, data["mz"], data["intensity"])
 
         return base64.b64encode(pickle.dumps(siteLocator)).decode(), new_peak_info, base64.b64encode(pickle.dumps(fragmentsObj)).decode()
     
